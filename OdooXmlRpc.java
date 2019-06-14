@@ -9,29 +9,15 @@
 package routines;
 
 import org.apache.xmlrpc.XmlRpcException;
-import org.apache.xmlrpc.client.XmlRpcClient;
-import org.apache.xmlrpc.client.XmlRpcClientConfigImpl;
-import org.apache.xmlrpc.client.XmlRpcTransport;
-import org.apache.xmlrpc.client.XmlRpcTransportFactory;
-
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
-
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
+import org.apache.xmlrpc.client.*;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import java.util.Map;
 import java.util.List;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.Arrays;
-
-import org.apache.log4j.Logger;
-
 import java.net.URL;
 import java.net.MalformedURLException;
 
@@ -50,54 +36,29 @@ public class OdooXmlRpc {
     private static XmlRpcClient client = new XmlRpcClient();
     private static XmlRpcClientConfigImpl commonConfig = new XmlRpcClientConfigImpl();
     private static XmlRpcClientConfigImpl objectConfig = new XmlRpcClientConfigImpl();
-	public static final org.apache.log4j.Logger LOGGER = org.apache.log4j.Logger.getRootLogger();
-	
+	public static Log LOGGER = LogFactory.getLog(OdooXmlRpc.class);
+	public static void setLogger(String logger) {
+		LOGGER = LogFactory.getLog(logger);
+	}
+	public static void setLogger (Log logger) {
+		LOGGER = logger;
+	}
+
 	private static final int CONNECTION_TIMEOUT = 20000;
 	private static final int RECEIVE_TIMEOUT = 60000;
-	
-	
     
     public OdooXmlRpc() {
     	commonConfig.setConnectionTimeout(CONNECTION_TIMEOUT);
         commonConfig.setReplyTimeout(RECEIVE_TIMEOUT);
         commonConfig.setEnabledForExtensions(true);
+        commonConfig.setEnabledForExceptions(true);
         objectConfig.setConnectionTimeout(CONNECTION_TIMEOUT);
         objectConfig.setReplyTimeout(RECEIVE_TIMEOUT);
         objectConfig.setEnabledForExtensions(true);
-        
-    	// Create a trust manager that does not validate certificate chains
-        TrustManager[] trustAllCerts = new TrustManager[] {
-            new X509TrustManager() {
-                public X509Certificate[] getAcceptedIssuers() {
-                    return null;
-                }
-     
-                public void checkClientTrusted(X509Certificate[] certs, String authType) {
-                    // Trust always
-                }
-     
-                public void checkServerTrusted(X509Certificate[] certs, String authType) {
-                    // Trust always
-                }
-            }
-        };
-        
-        try {
-        
-	        // Install the all-trusting trust manager
-	        SSLContext sc = SSLContext.getInstance("SSL");
-	        
-	    	 // Create empty HostnameVerifier
-	        HostnameVerifier hv = new HostnameVerifier() {
-	                    public boolean verify(String arg0, SSLSession arg1) {
-	                            return true;
-	                    }
-	        };
-	        sc.init(null, trustAllCerts, new java.security.SecureRandom());
-	        HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
-	        HttpsURLConnection.setDefaultHostnameVerifier(hv);
-        } catch (Exception e) {LOGGER.info(e.getMessage());}
+        objectConfig.setEnabledForExceptions(true);
+               
     }
+    
     /**
      * If called, xmlrpc request/response will be printed to stdout
      */
@@ -127,7 +88,7 @@ public class OdooXmlRpc {
         try {
             setHost(new URL(host));
         } catch (MalformedURLException e) {
-        	LOGGER.info(String.format("[OdooXmlRpc.setHost] %s", e.getMessage()));
+        	LOGGER.fatal(String.format("[OdooXmlRpc.setHost] %s", e.getMessage()));
         };
     }
     public void setHost(URL newHost) { host = newHost; }
@@ -141,9 +102,9 @@ public class OdooXmlRpc {
      * @return boolean
      */
     public boolean login (String host, String database, String user, String password) {
-    	LOGGER.info(String.format("Starting connection... to %s - %s as %s", host, database, user));
+    	LOGGER.debug(String.format("Starting connection... to %s - %s as %s", host, database, user));
         if (host == null || host.isEmpty()) {
-        	LOGGER.info("[OdooXmlRpc.login] Host should not be empty");
+        	LOGGER.fatal("[OdooXmlRpc.login] Host should not be empty");
             return false;
         }
 
@@ -152,10 +113,8 @@ public class OdooXmlRpc {
             commonConfig.setServerURL(new URL(this.host, "/xmlrpc/2/common"));            
             objectConfig.setServerURL(new URL(this.host, "/xmlrpc/2/object"));
             
-            Object[] params = new Object[] {database, user, password};
-            LOGGER.info("Sending request...");
-            Object res = client.execute(commonConfig, "login", params);
-            LOGGER.info("Response received.");
+            Object[] params = new Object[] {database, user, password, new Object[]{}};
+            Object res = client.execute(commonConfig, "authenticate", params);
             this.password = password;
             this.database = database;
             
@@ -163,15 +122,14 @@ public class OdooXmlRpc {
             else if (res instanceof Integer) this.uid = (int) res;
             //else throw new Exception("bad response");
         } catch (MalformedURLException urlException) {
-            LOGGER.info("[OdooXmlRpc.login] Malformed url.");
+            LOGGER.fatal("[OdooXmlRpc.login] Malformed url.");
             return false;
         } catch (XmlRpcException e) {
-        	LOGGER.info("[OdooXmlRpc.login] XmlRpcException. Details" + e.getMessage());
+        	LOGGER.error("[OdooXmlRpc.login] XmlRpcException. Details" + e.getMessage());
         } catch (Exception e) {
-        	LOGGER.info("[OdooXmlRpc.login] Exception. Details: " + e.getMessage());
+        	LOGGER.error("[OdooXmlRpc.login] Exception. Details: " + e.getMessage());
             return false;
         }
-        LOGGER.info("End of connection attempt");
         return this.uid != -1;
     }
 
@@ -180,16 +138,16 @@ public class OdooXmlRpc {
      * Get details on Odoo version (debuging purpose)
      * @return version map 
      */
+	@SuppressWarnings({ "unchecked"})
     public Map<String,Object> getVersion () {
         Map<String,Object> version = new HashMap<>();
         try {
             version = (HashMap<String,Object>) client.execute(commonConfig, "version", new Object[0]);
         } catch (Exception e) {
-        	LOGGER.info(e.getMessage());
+        	LOGGER.error(e.getMessage());
         }
         return version;
     }
-    
     
 
     /**
@@ -214,18 +172,46 @@ public class OdooXmlRpc {
             res = client.execute(objectConfig, "execute_kw", params);
             
         } catch (Exception e) {
-        	LOGGER.info("[OdooXmlRpc.executeMethod] Exception during execution of " + modelName + "=>" + methodName + ". Details: " + e.getMessage());
+        	LOGGER.error("[OdooXmlRpc.executeMethod] Exception during execution of " + modelName + "=>" + methodName + ". Details: " + e.getMessage());
         }
         return res;
     }
     
+    /**
+     * Execute method with parameters
+     * @param modelName		string
+     * @param methodName	string
+     * @param args 	list
+     * @param kw 	map
+     * @return Object
+     */
+    public Object executeMethod (String modelName, String methodName, List args, Map kw) {
+        Object res = new Object();
+        
+        try {
+            Object[] params = new Object[]{
+                    this.database,
+                    this.uid,
+                    this.password,
+                    modelName,
+                    methodName,
+                    args,
+                    kw
+            };
+            res = client.execute(objectConfig, "execute_kw", params);
+            
+        } catch (Exception e) {
+        	LOGGER.error("[OdooXmlRpc.executeMethod] Exception during execution of " + modelName + "=>" + methodName + ". Details: " + e.getMessage());
+        }
+        return res;
+    }
     /**
      * List field, type, help of an Odoo model
      * 
      * @param modelName	string
      * @return listRecords	map
      */
-    @SuppressWarnings("rawtypes")
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public Map listRecords (String modelName) {
         Map result = new HashMap();
         try {
@@ -240,7 +226,7 @@ public class OdooXmlRpc {
             ));
 
         } catch (Exception e) {
-        	LOGGER.info("[OdooXmlRpc.listRecords] Exception when listing Records of " + modelName + ". Details: " + e.getMessage());
+        	LOGGER.error("[OdooXmlRpc.listRecords] Exception when listing Records of " + modelName + ". Details: " + e.getMessage());
         }
         return result;
     }
@@ -264,7 +250,7 @@ public class OdooXmlRpc {
             ));
 
         } catch (Exception e) {
-        	LOGGER.info("[OdooXmlRpc.createRecord] Exception when creating record in " + modelName + ". Details: " + e.getMessage());
+        	LOGGER.error("[OdooXmlRpc.createRecord] Exception when creating record in " + modelName + ". Details: " + e.getMessage());
         }
         return recordId;
     }
@@ -275,7 +261,7 @@ public class OdooXmlRpc {
      * @param data	map		the record data (without id)
      * @param id	integer	the id of the existing record
      */
-    public void updateRecord (String modelName, Map data, int id) {
+    public void updateRecord (String modelName, Map<String,Object> data, int id) {
         try {
             client.setConfig(objectConfig);
             client.execute("execute_kw", asList(
@@ -288,10 +274,11 @@ public class OdooXmlRpc {
             ));
 
         } catch (Exception e) {
-        	LOGGER.info("[OdooXmlRpc.updateRecord] Exception when updating record no" + String.valueOf(id) + " in " + modelName + ". Details: " + e.getMessage());
+        	LOGGER.error("[OdooXmlRpc.updateRecord] Exception when updating record no" + String.valueOf(id) + " in " + modelName + ". Details: " + e.getMessage());
         }
     }
 
+	@SuppressWarnings({ "unchecked", "rawtypes" })
     public Map getRecordById (String modelName, int id, List fields) {
     	Map<String,Object> record = new HashMap<>();
     	try {
@@ -302,11 +289,12 @@ public class OdooXmlRpc {
 	        	record = (Map<String, Object>) records.get(0);
 	        }
 	    } catch (Exception e) {
-	        LOGGER.info("[OdooXmlRpc.getRecordById] Exception when getting record no" + String.valueOf(id) + " in " + modelName + ". Details: " + e.getMessage());
+	        LOGGER.error("[OdooXmlRpc.getRecordById] Exception when getting record no" + String.valueOf(id) + " in " + modelName + ". Details: " + e.getMessage());
     	}
         return record;
     }
 
+	@SuppressWarnings({"rawtypes" })
     public List getRecords (String model, List fields) {
         return getRecords (model, fields, null);
     }
@@ -316,6 +304,7 @@ public class OdooXmlRpc {
 
         List AllFilters = new ArrayList<>();
         AllFilters.add(asList("id", ">", "0"));
+        
         if (filters != null) {
             for (List filter : filters){
                 AllFilters.add(filter);
@@ -333,13 +322,31 @@ public class OdooXmlRpc {
                     ),
                     new HashMap() {{
                         put("fields", finalFields);
+                        put("context", new HashMap(){{put("active_test", false);}});
                     }}
+                    
+                    
             )));
 
         } catch (Exception e) {
-        	LOGGER.info(String.format("[OdooXmlRpc.getRecords] Exception. Details: %s", e.getMessage()));
+        	LOGGER.error(String.format("[OdooXmlRpc.getRecords] Exception. Details: %s", e.getMessage()));
         }
         return result;
     }
+    
+	/**
+	 * Return a ready to import List for a many2many field
+	 * Doc: https://www.odoo.com/documentation/11.0/reference/orm.html#odoo.models.Model.write
+	 * @param fieldValue List<Integer> List of ids
+	 * @return List
+	 */
+	public static List<Object> many2manyOverride (List<Integer> fieldValue) {
+		return Arrays.asList(Arrays.asList(
+			6, 
+			0,
+			Arrays.asList(
+				fieldValue == null ? new Integer[0] : fieldValue.toArray()
+			)
+		));
+	}
 }
-
