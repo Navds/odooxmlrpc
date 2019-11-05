@@ -1,4 +1,4 @@
-package routines;
+package com.navds;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -15,15 +15,18 @@ import org.apache.xmlrpc.client.XmlRpcStreamTransport;
 import org.apache.xmlrpc.client.XmlRpcSunHttpTransport;
 import org.apache.xmlrpc.common.XmlRpcStreamRequestConfig;
 import org.xml.sax.SAXException;
+import org.json.XML;
 
 
 /**
  * This is a custom XML-RPC transport which logs the outgoing and incoming
+ * Depends on org.json
  * XML-RPC messages.
  */
 public class MessageLoggingTransport extends XmlRpcSunHttpTransport
 {
     private static final Logger log = Logger.getLogger(MessageLoggingTransport.class.getName());
+    private boolean dumpJson = false;
 
 
     /**
@@ -34,7 +37,12 @@ public class MessageLoggingTransport extends XmlRpcSunHttpTransport
      */
     public MessageLoggingTransport(final XmlRpcClient pClient)
     {
+        this(pClient, false);
+    }
+
+    public MessageLoggingTransport(final XmlRpcClient pClient, boolean dumpJson) {
         super(pClient);
+        this.dumpJson = dumpJson;
     }
 
 
@@ -46,7 +54,9 @@ public class MessageLoggingTransport extends XmlRpcSunHttpTransport
     {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         pWriter.write(baos);
-        log.info(baos.toString());
+        System.out.println("dumpJson " + dumpJson);
+        String dump = this.dumpJson ? org.json.XML.toJSONObject(baos.toString()).toString(2) : baos.toString();
+        log.info(dump);
         super.writeRequest(pWriter);
     }
 
