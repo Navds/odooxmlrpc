@@ -85,7 +85,8 @@ public class OdooJSONRpc {
         OdooRPCPayload payload = new OdooRPCPayload();
         payload.prepareLogin(user, password, db);
         OdooRpcResponse response = execute(AUTH_URI, payload);
-        return response.isOkay();
+        connected = response.isOkay();
+        return connected;
     }
 
     /**
