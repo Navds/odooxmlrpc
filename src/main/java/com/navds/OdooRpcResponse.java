@@ -83,7 +83,7 @@ public class OdooRpcResponse {
         try {
             error = new JSONObject(this.body).getJSONObject("error");
         } catch (JSONException e) {
-            LOGGER.error("JSON parsing error", e);
+            LOGGER.error("Response is not a valid json. " + e.getMessage());
         }
         return error;
     }
@@ -96,7 +96,7 @@ public class OdooRpcResponse {
                 .getJSONObject("data");
             error = data.getString("name") + ". " + data.getString("message");
         } catch (JSONException e) {
-            LOGGER.error("JSON parsing error", e);
+            LOGGER.error("Response is not a valid json. " + e.getMessage());
         }
         return error;
     }

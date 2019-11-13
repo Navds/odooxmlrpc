@@ -413,11 +413,13 @@ public class OdooJSONRpc {
         if (dumpRequest) LOGGER.info("POST " + odooUrl + uri + ": " + payload.toString(2));
         OdooRpcResponse response = new OdooRpcResponse();
         try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
-            StringEntity requestEntity = new StringEntity(payload.toString());
+            StringEntity requestEntity = new StringEntity(payload.toString(), "UTF-8");
             HttpPost httpPost = new HttpPost(odooUrl + uri);
             httpPost.setEntity(requestEntity);
             httpPost.setConfig(requestConfig);
             httpPost.setHeader(HttpHeaders.CONTENT_TYPE, "application/json");
+            httpPost.setHeader(HttpHeaders.CONTENT_ENCODING, "utf8");
+            httpPost.setHeader(HttpHeaders.ACCEPT, "application/json");
 
             CloseableHttpResponse httpResponse = httpClient.execute(httpPost,httpContext);
             response = new OdooRpcResponse(httpResponse);
